@@ -19,6 +19,10 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 
+#ifdef HAVE_XINERAMA
+#include <X11/extensions/Xinerama.h>
+#endif
+
 #include "aosd-internal.h"
 
 Aosd*
@@ -112,16 +116,46 @@ aosd_get_geometry(Aosd* aosd, int* x, int* y, int* width, int* height)
 void
 aosd_get_screen_size(Aosd* aosd, int* width, int* height)
 {
+  aosd_get_screen_size_xinerama(aosd, -1, width, height);
+}
+
+void
+aosd_get_screen_size_xinerama(Aosd* aosd, int output, int* width, int* height)
+{
   if (aosd == NULL)
     return;
 
   Display* dsp = aosd->display;
   int scr = aosd->screen_num;
 
-  if (width != NULL)
-    *width = DisplayWidth(dsp, scr);
-  if (height != NULL)
-    *height = DisplayHeight(dsp, scr);
+#ifdef HAVE_XINERAMA
+  int screens;
+  int dummy_a, dummy_b;
+  XineramaScreenInfo *screeninfo = NULL;
+
+  if (output >= 0 &&
+      XineramaQueryExtension(dsp, &dummy_a, &dummy_b) &&
+      (screeninfo = XineramaQueryScreens(dsp, &screens)) &&
+      XineramaIsActive(dsp))
+  {
+    if (output >= screens)
+      output = 0;
+    if (width != NULL)
+      *width = screeninfo[output].width + screeninfo[output].x_org;
+    if (height != NULL)
+      *height = screeninfo[output].height + screeninfo[output].y_org;
+  } else
+  {
+#endif
+    if (width != NULL)
+      *width = DisplayWidth(dsp, scr);
+    if (height != NULL)
+      *height = DisplayHeight(dsp, scr);
+#ifdef HAVE_XINERAMA
+  }
+  if (screeninfo)
+    XFree(screeninfo);
+#endif
 }
 
 Bool
@@ -224,12 +258,21 @@ aosd_set_position_with_offset(Aosd* aosd,
     AosdCoordinate abscissa, AosdCoordinate ordinate, int width, int height,
     int x_offset, int y_offset)
 {
+  aosd_set_position_with_offset_xinerama(aosd, abscissa, ordinate, width,
+                                         height, x_offset, y_offset, -1);
+}
+
+void
+aosd_set_position_with_offset_xinerama(Aosd* aosd,
+    AosdCoordinate abscissa, AosdCoordinate ordinate, int width, int height,
+    int x_offset, int y_offset, int output)
+{
   if (aosd == NULL)
     return;
 
   int dsp_width, dsp_height;
 
-  aosd_get_screen_size(aosd, &dsp_width, &dsp_height);
+  aosd_get_screen_size_xinerama(aosd, output, &dsp_width, &dsp_height);
 
   int x = dsp_width - width;
   int y = dsp_height - height;

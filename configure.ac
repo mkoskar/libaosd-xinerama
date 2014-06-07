@@ -62,6 +62,28 @@ else
     enable_xcomposite="no"
 fi
 
+AC_ARG_ENABLE(xinerama,
+    [AC_HELP_STRING([--disable-xinerama], [avoid using Xinerama (default=autodetect)])],
+    [enable_xinerama=$enableval], [enable_xinerama="yes"]
+)
+
+if test "$enable_xinerama" = "yes"; then
+    PKG_CHECK_MODULES(XINERAMA, xinerama,
+	[
+	 PACKAGES+=" xinerama"
+	 X_CFLAGS+=" $XINERAMA_CFLAGS"
+	 X_LIBS+=" $XINERAMA_LIBS"
+	 AC_DEFINE([HAVE_XINERAMA], [1], [Xinerama  extension available])
+	],
+	[
+	 AC_MSG_WARN(can't find xinerama package)
+	 enable_xinerama="no"
+	]
+    )
+else
+    enable_xinerama="no"
+fi
+
 EXAMPLES="animation"
 
 AC_ARG_ENABLE(pangocairo,
@@ -138,6 +160,7 @@ cat << _EOF_
 
 Configuration:
 AC_HELP_STRING([X Composite], [${enable_xcomposite}])
+AC_HELP_STRING([Xinerama], [${enable_xinerama}])
 AC_HELP_STRING([Pango-Cairo], [${enable_pangocairo}])
 AC_HELP_STRING([Glib-2.0], [${enable_glib}])
 AC_HELP_STRING([Examples], [${EXAMPLES}])

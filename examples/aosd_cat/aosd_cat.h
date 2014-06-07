@@ -37,6 +37,7 @@ static struct Configuration
   gint fore_alpha;
 
   /* Geometry */
+  gint output;
   gint position; // 0-8
   gint x_offset;
   gint y_offset;
@@ -68,7 +69,7 @@ static struct Configuration
 {
   0, 192, 255,
 
-  6, 50, -50, 2, 0,
+  -1, 6, 50, -50, 2, 0,
 
   2, NULL, 0,
 

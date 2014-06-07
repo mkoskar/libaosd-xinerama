@@ -40,6 +40,7 @@ parse_options(int* argc, char** argv[])
   ADD_NUMB(back_alpha);
   ADD_NUMB(shadow_alpha);
   ADD_NUMB(fore_alpha);
+  ADD_NUMB(output);
   ADD_NUMB(position);
   ADD_NUMB(x_offset);
   ADD_NUMB(y_offset);
@@ -80,6 +81,7 @@ parse_options(int* argc, char** argv[])
 
   GOptionEntry geometry[] =
   {
+    OPT_INT("output", 'O', output, "Xinerama output (0-N), -1 for whole X screen."),
     OPT_INT("position", 'p', position, "OSD window position."),
     OPT_INT("x-offset", 'x', x_offset, "x-axis window offset. **"),
     OPT_INT("y-offset", 'y', y_offset, "y-axis window offset. **"),
@@ -201,6 +203,7 @@ verify_vals(void)
   NUM(shadow_alpha, 0, G_MAXUINT8);
   NUM(fore_alpha, 0, G_MAXUINT8);
 
+  NUM(output, -1, G_MAXINT);
   NUM(padding, 0, G_MAXUINT8);
   NUM(shadow_offset, G_MININT8, G_MAXINT8);
   NUM(position, 0, 8);
@@ -359,9 +362,9 @@ static void
 resize_and_show(void)
 {
   aosd_text_get_size(data.rend, &data.width, &data.height);
-  aosd_set_position_with_offset(data.aosd,
+  aosd_set_position_with_offset_xinerama(data.aosd,
       config.position % 3, config.position / 3,
-      data.width, data.height, config.x_offset, config.y_offset);
+      data.width, data.height, config.x_offset, config.y_offset, config.output);
 
   aosd_flash(data.aosd, config.fade_in, config.fade_full, config.fade_out);
 }
