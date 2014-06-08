@@ -64,6 +64,7 @@ typedef struct
 void aosd_text_renderer(cairo_t* cr, void* TextRenderData_ptr);
 void aosd_text_get_size(TextRenderData* trd, unsigned* width, unsigned* height);
 int aosd_text_get_screen_wrap_width(Aosd* aosd, TextRenderData* trd);
+int aosd_text_get_screen_wrap_width_xinerama(Aosd* aosd, int output, TextRenderData* trd);
 
 #ifdef __cplusplus
 }

@@ -298,12 +298,18 @@ aosd_text_get_size(TextRenderData* trd, unsigned* width, unsigned* height)
 int
 aosd_text_get_screen_wrap_width(Aosd* aosd, TextRenderData* trd)
 {
+  return aosd_text_get_screen_wrap_width_xinerama(aosd, -1, trd);
+}
+
+int
+aosd_text_get_screen_wrap_width_xinerama(Aosd* aosd, int output, TextRenderData* trd)
+{
   if (aosd == NULL)
     return -1;
 
   int width;
 
-  aosd_get_screen_size(aosd, &width, NULL);
+  aosd_get_screen_size_xinerama(aosd, output, &width, NULL);
 
   if (trd != NULL)
   {

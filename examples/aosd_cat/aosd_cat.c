@@ -261,18 +261,6 @@ setup(void)
   if (config.font != NULL)
     pango_layout_set_font_aosd(data.rend->lay, config.font);
   pango_layout_set_wrap(data.rend->lay, PANGO_WRAP_WORD_CHAR);
-  if (config.width == 0)
-  {
-    config.width =
-      PANGO_PIXELS(aosd_text_get_screen_wrap_width(data.aosd, data.rend));
-    config.width += (config.position % 3 == 2 ? 1 : -1) * config.x_offset;
-  }
-
-  config.width *= PANGO_SCALE;
-  if (config.width < 0)
-    config.width = -1;
-
-  pango_layout_set_width(data.rend->lay, config.width);
 
   END_CATCH;
   RETURN_CATCH;
@@ -359,6 +347,23 @@ get_data(void)
 }
 
 static void
+setup_width(void)
+{
+  if (config.width == 0)
+  {
+    config.width = PANGO_PIXELS(aosd_text_get_screen_wrap_width_xinerama(
+      data.aosd, config.output, data.rend));
+    config.width += (config.position % 3 == 2 ? 1 : -1) * config.x_offset;
+  }
+
+  config.width *= PANGO_SCALE;
+  if (config.width < 0)
+    config.width = -1;
+
+  pango_layout_set_width(data.rend->lay, config.width);
+}
+
+static void
 resize_and_show(void)
 {
   aosd_text_get_size(data.rend, &data.width, &data.height);
@@ -409,6 +414,7 @@ main(int argc, char* argv[])
   CATCH((data.list = g_queue_new()) != NULL,
       "Unable to allocate scrollbuffer list.");
 
+  setup_width();
   while ((text = get_data()) != NULL)
   {
     pango_layout_set_text(data.rend->lay, text, -1);
