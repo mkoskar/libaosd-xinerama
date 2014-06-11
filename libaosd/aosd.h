@@ -99,6 +99,9 @@ void aosd_loop_for(Aosd* aosd, unsigned loop_ms);
 /* automatic object manipulator */
 void aosd_flash(Aosd* aosd, unsigned fade_in_ms,
     unsigned full_ms, unsigned fade_out_ms);
+void aosd_flash_with_irq_poll(Aosd* aosd,
+    int (*irq_poll_func) (void), unsigned irq_poll_ms,
+    unsigned fade_in_ms, unsigned full_ms, unsigned fade_out_ms);
 
 #ifdef __cplusplus
 }

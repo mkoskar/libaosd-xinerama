@@ -167,6 +167,14 @@ void
 aosd_flash(Aosd* aosd,
     unsigned fade_in_ms, unsigned full_ms, unsigned fade_out_ms)
 {
+  aosd_flash_with_irq_poll(aosd, NULL, 0, fade_in_ms, full_ms, fade_out_ms);
+}
+
+void
+aosd_flash_with_irq_poll(Aosd* aosd,
+    int (*irq_poll_func) (void), unsigned irq_poll_ms,
+    unsigned fade_in_ms, unsigned full_ms, unsigned fade_out_ms)
+{
   if (aosd == NULL ||
       (fade_in_ms == 0 &&
        full_ms == 0 &&
@@ -181,6 +189,9 @@ aosd_flash(Aosd* aosd,
   flash.height = aosd->height;
 
   float step;
+  unsigned stepped_ms;
+  int fade_in = !aosd->shown;
+  int irq = 0;
 
   if (!aosd->shown)
   {
@@ -188,7 +199,7 @@ aosd_flash(Aosd* aosd,
     aosd_loop_once(aosd);
   }
 
-  if (fade_in_ms != 0 && aosd->shown)
+  if (fade_in && fade_in_ms != 0 && aosd->shown)
   {
     step = 1.0 / (float)fade_in_ms;
     for (; flash.alpha < 1.0 && aosd->shown; flash.alpha += step)
@@ -203,10 +214,22 @@ aosd_flash(Aosd* aosd,
   if (full_ms != 0 && aosd->shown)
   {
     aosd_render(aosd);
-    aosd_loop_for(aosd, full_ms);
+    if (irq_poll_func)
+    {
+      step = irq_poll_ms;
+      for (stepped_ms = 0; stepped_ms < full_ms; stepped_ms += step)
+      {
+        aosd_loop_for(aosd, step);
+        irq = irq_poll_func();
+        if (irq)
+          break;
+      }
+    }
+    else
+      aosd_loop_for(aosd, full_ms);
   }
 
-  if (fade_out_ms != 0 && aosd->shown)
+  if (fade_out_ms != 0 && aosd->shown && !irq)
   {
     step = 1.0 / (float)fade_out_ms;
     for (; flash.alpha > 0.0 && aosd->shown; flash.alpha -= step)
@@ -216,7 +239,7 @@ aosd_flash(Aosd* aosd,
     }
   }
 
-  if (aosd->shown)
+  if (aosd->shown && !irq)
   {
     aosd_hide(aosd);
     aosd_loop_once(aosd);

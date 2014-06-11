@@ -153,7 +153,6 @@ filter_for_fg(PangoAttribute* attr, gpointer data)
 {
   switch (attr->klass->type)
   {
-    case PANGO_ATTR_FOREGROUND:
     case PANGO_ATTR_BACKGROUND:
       return FALSE;
 
@@ -174,7 +173,7 @@ aosd_text_renderer(cairo_t* cr, void* TextRenderData_ptr)
   PangoAttrList* new_attrs = NULL;
   PangoColor col = {0, 0, 0};
 
-  // Draw background
+  // Background
   if (data->back.color != NULL && data->back.opacity != 0)
   {
     pango_color_parse(&col, data->back.color);
@@ -187,7 +186,52 @@ aosd_text_renderer(cairo_t* cr, void* TextRenderData_ptr)
     col = (PangoColor){0, 0, 0};
   }
 
-  // Drop the shadow
+  // Foreground #1
+  if (data->fore.opacity != 0)
+  {
+    if (attrs != NULL)
+    {
+      lay = pango_layout_copy(data->lay);
+      if (data->fore.opacity < 255)
+      {
+        new_attrs = pango_attr_list_filter(attrs, filter_for_bg, NULL);
+        pango_layout_set_attributes(lay, new_attrs);
+      }
+    }
+    else
+      lay = data->lay;
+
+    if (data->fore.color != NULL)
+      pango_color_parse(&col, data->fore.color);
+    cairo_set_source_rgba(cr,
+        col.red   / (double)65535,
+        col.green / (double)65535,
+        col.blue  / (double)65535,
+        data->fore.opacity / (double)255);
+
+    int x = data->geom.x_offset + data->lbearing;
+    int y = data->geom.y_offset;
+    if (data->shadow.opacity != 0 &&
+        (data->shadow.x_offset != 0 || data->shadow.y_offset != 0))
+    {
+      x += (data->shadow.x_offset < 0 ? -data->shadow.x_offset : 0);
+      y += (data->shadow.y_offset < 0 ? -data->shadow.y_offset : 0);
+    }
+    cairo_move_to(cr, x, y);
+
+    pango_cairo_show_layout(cr, lay);
+
+    if (new_attrs != NULL)
+      pango_attr_list_unref(new_attrs);
+    if (attrs != NULL)
+      g_object_unref(lay);
+
+    lay = NULL;
+    new_attrs = NULL;
+    col = (PangoColor){0, 0, 0};
+  }
+
+  // Shadow
   if (data->shadow.opacity != 0 &&
       (data->shadow.x_offset != 0 || data->shadow.y_offset != 0))
   {
@@ -229,13 +273,16 @@ aosd_text_renderer(cairo_t* cr, void* TextRenderData_ptr)
     col = (PangoColor){0, 0, 0};
   }
 
-  // And finally the foreground
+  // Foreground #2
   if (data->fore.opacity != 0)
   {
     if (attrs != NULL)
     {
       lay = pango_layout_copy(data->lay);
-      new_attrs = pango_attr_list_filter(attrs, filter_for_fg, NULL);
+      if (data->fore.opacity < 255)
+        new_attrs = pango_attr_list_filter(attrs, filter_for_bg, NULL);
+      else
+        new_attrs = pango_attr_list_filter(attrs, filter_for_fg, NULL);
       pango_layout_set_attributes(lay, new_attrs);
     }
     else

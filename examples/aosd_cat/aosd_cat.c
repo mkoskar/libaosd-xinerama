@@ -3,15 +3,19 @@
  * Copyright (C) 2008 Eugene Paskevich <eugene@raptor.kiev.ua>
  */
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/poll.h>
 #include <time.h>
-#include <glib.h>
-#include <aosd-text.h>
 
-#include "config.h"
+#include <glib.h>
+
+#include <aosd-text.h>
 #include "aosd_cat.h"
+#include "config.h"
 
 static gboolean
 parse_options(int* argc, char** argv[])
@@ -49,6 +53,7 @@ parse_options(int* argc, char** argv[])
   ADD_NUMB(transparency);
   ADD_STRN(font);
   ADD_NUMB(width);
+  ADD_NUMB(alignment);
   ADD_STRN(back_color);
   ADD_STRN(shadow_color);
   ADD_STRN(fore_color);
@@ -57,7 +62,11 @@ parse_options(int* argc, char** argv[])
   ADD_NUMB(fade_out);
   ADD_NUMB(age);
   ADD_NUMB(lines);
+  ADD_NUMB(wait);
+  ADD_NUMB(keep_reading);
+  ADD_NUMB(markup);
   ADD_STRN(input);
+  ADD_NUMB(input_timeout);
 #undef ADD_ELEM
 #undef ADD_NUMB
 #undef ADD_STRN
@@ -81,7 +90,7 @@ parse_options(int* argc, char** argv[])
 
   GOptionEntry geometry[] =
   {
-    OPT_INT("output", 'O', output, "Xinerama output (0-N), -1 for whole X screen."),
+    OPT_INT("output", 'O', output, "Xinerama output (0-N), -1 for whole X screen. **"),
     OPT_INT("position", 'p', position, "OSD window position."),
     OPT_INT("x-offset", 'x', x_offset, "x-axis window offset. **"),
     OPT_INT("y-offset", 'y', y_offset, "y-axis window offset. **"),
@@ -95,6 +104,7 @@ parse_options(int* argc, char** argv[])
     OPT_INT("transparency", 't', transparency, "transparency mode."),
     OPT_STR("font", 'n', font, "OSD font."),
     OPT_INT("width", 'w', width, "OSD wrapping width in pixels."),
+    OPT_INT("alignment", 'A', alignment, "text alignment (0=left, 1=center, 2=right)."),
     { NULL }
   };
 
@@ -123,12 +133,19 @@ parse_options(int* argc, char** argv[])
 
   GOptionEntry source[] =
   {
+    { "wait", 'W', 0, G_OPTION_ARG_NONE, &config.wait,
+      "Wait until the display is clear.", NULL },
+    { "keep-reading", 'k', 0, G_OPTION_ARG_NONE, &config.keep_reading,
+      "Reopen input on EOF (doesn't have any effect when reading from stdin).", NULL },
+    { "markup", 'm', 0, G_OPTION_ARG_NONE, &config.markup,
+      "Enable Pango markup language.", NULL },
     OPT_STR("input", 'i', input, "input text source."),
+    OPT_INT("input-timeout", 'T', input_timeout, "input timeout (in seconds)."),
     { NULL }
   };
 
 #undef DEF
-#undef OPT_ANY
+#undef OPT_ADD
 #undef OPT_INT
 #undef OPT_STR
 
@@ -184,7 +201,7 @@ parse_options(int* argc, char** argv[])
   if (ctx != NULL)
     g_option_context_free(ctx);
   if (opt_list != NULL)
-    g_slist_free(opt_list);
+    g_slist_free_full(opt_list, g_free);
 
   RETURN_CATCH;
 }
@@ -209,6 +226,7 @@ verify_vals(void)
   NUM(position, 0, 8);
 
   NUM(transparency, 0, 2);
+  NUM(alignment, 0, 2);
 
   NUM(fade_in, 0, G_MAXINT);
   NUM(fade_full, 0, G_MAXINT);
@@ -217,13 +235,31 @@ verify_vals(void)
   NUM(width, 0, G_MAXINT);
   NUM(age, 0, G_MAXINT);
   NUM(lines, 0, G_MAXINT);
+
+  NUM(input_timeout, 0, G_MAXINT);
 #undef NUM
 
   if (strcmp(config.input, "-") == 0)
     data.input = stdin;
-  else
-    CATCH((data.input = fopen(config.input, "r")) != NULL,
-        "Unable to open specified file for reading.");
+
+  END_CATCH;
+  RETURN_CATCH;
+}
+
+static gboolean
+open_input(void)
+{
+  if (data.input == stdin)
+    return TRUE;
+
+  PREPARE_CATCH;
+  START_CATCH;
+
+  int fd;
+  CATCH((fd = open(config.input, O_RDONLY | O_NONBLOCK)) >= 0,
+      "Unable to open specified file for reading.");
+  CATCH((data.input = fdopen(fd, "r")) != NULL,
+      "Unable to open specified file for reading.");
 
   END_CATCH;
   RETURN_CATCH;
@@ -261,6 +297,7 @@ setup(void)
   if (config.font != NULL)
     pango_layout_set_font_aosd(data.rend->lay, config.font);
   pango_layout_set_wrap(data.rend->lay, PANGO_WRAP_WORD_CHAR);
+  pango_layout_set_alignment(data.rend->lay, config.alignment);
 
   END_CATCH;
   RETURN_CATCH;
@@ -299,32 +336,48 @@ concat_queue(gpointer data, gpointer user_data)
   arr[i] = NULL;
 }
 
-static gchar*
-get_data(void)
+static int
+get_data(gchar** text)
 {
-  gchar* text = NULL;
   Line* elem = NULL;
+  *text = NULL;
 
   PREPARE_CATCH;
   START_CATCH;
 
-  char buf[1024];
+  int poll_timeout = -1;
+  if (config.input_timeout > 0)
+    poll_timeout = config.input_timeout * 1000;
 
-  CATCH(fgets(buf, 1024, data.input) != NULL, "");
+  struct pollfd pollfd = { fileno(data.input), POLLIN, 0 };
+  int ret = poll(&pollfd, 1, poll_timeout);
+  if (ret < 0)
+  {
+    DEBUG("%s", strerror(errno));
+    return -1;
+  }
+  if (ret == 0)
+    return -2;
+
+  char buf[1024];
+  if (fgets(buf, 1024, data.input) == NULL)
+    return 1;
 
   char* end = buf + strlen(buf) - 1;
   if (*end == '\n')
     *end = '\0';
 
-  elem = calloc(1, sizeof(Line));
-  CATCH(elem != NULL, "Unable to allocate scrollbuffer line element.");
+  if (*buf != 7 || strlen(buf) != 1)
+  {
+    elem = calloc(1, sizeof(Line));
+    CATCH(elem != NULL, "Unable to allocate scrollbuffer line element.");
 
-  elem->str = g_strdup(buf);
-  CATCH(elem->str != NULL, "Unable to allocate scrollbuffer line string.");
+    elem->str = g_strdup(buf);
+    CATCH(elem->str != NULL, "Unable to allocate scrollbuffer line string.");
 
-  elem->stamp = time(NULL);
-
-  g_queue_push_tail(data.list, elem);
+    elem->stamp = time(NULL);
+    g_queue_push_tail(data.list, elem);
+  }
 
   clean_queue();
 
@@ -332,7 +385,7 @@ get_data(void)
   arr[0] = NULL;
   g_queue_foreach(data.list, concat_queue, arr);
 
-  text = g_strjoinv("\n", arr);
+  *text = g_strjoinv("\n", arr);
 
   END_CATCH;
 
@@ -343,7 +396,7 @@ get_data(void)
     free(elem);
   }
 
-  return text;
+  return GOOD_CATCH ? 0 : -1;
 }
 
 static void
@@ -351,16 +404,26 @@ setup_width(void)
 {
   if (config.width == 0)
   {
-    config.width = PANGO_PIXELS(aosd_text_get_screen_wrap_width_xinerama(
+    data.width = PANGO_PIXELS(aosd_text_get_screen_wrap_width_xinerama(
       data.aosd, config.output, data.rend));
-    config.width += (config.position % 3 == 2 ? 1 : -1) * config.x_offset;
+    data.width += (config.position % 3 == 2 ? 1 : -1) * config.x_offset;
   }
 
-  config.width *= PANGO_SCALE;
-  if (config.width < 0)
-    config.width = -1;
+  data.width *= PANGO_SCALE;
+  if (data.width < 0)
+    data.width = -1;
 
-  pango_layout_set_width(data.rend->lay, config.width);
+  pango_layout_set_width(data.rend->lay, data.width);
+}
+
+static int
+irq_poll_func(void)
+{
+  int ret;
+  g_mutex_lock(&data.input_mutex);
+  ret = (data.input_status == 1);
+  g_mutex_unlock(&data.input_mutex);
+  return ret;
 }
 
 static void
@@ -370,8 +433,8 @@ resize_and_show(void)
   aosd_set_position_with_offset_xinerama(data.aosd,
       config.position % 3, config.position / 3,
       data.width, data.height, config.x_offset, config.y_offset, config.output);
-
-  aosd_flash(data.aosd, config.fade_in, config.fade_full, config.fade_out);
+  aosd_flash_with_irq_poll(data.aosd, (config.wait ? NULL : &irq_poll_func), 25,
+      config.fade_in, config.fade_full, config.fade_out);
 }
 
 static void
@@ -395,32 +458,104 @@ cleanup(void)
   }
 }
 
+static gpointer
+read_input(gpointer arg)
+{
+  int ret;
+  gchar* text = NULL;
+
+  PREPARE_CATCH;
+  while (1)
+  {
+    ret = get_data(&text);
+    if (ret == 1)
+    {
+      if (data.input == stdin || !config.keep_reading)
+        break;
+      fclose(data.input);
+      CATCH(open_input(), "");
+      continue;
+    }
+    if (ret != 0)
+      break;
+
+    g_mutex_lock(&data.input_mutex);
+    while (data.input_status != 0)
+      g_cond_wait(&data.input_cond, &data.input_mutex);
+    data.text = text;
+    data.input_status = 1;
+    g_cond_signal(&data.input_cond);
+    g_mutex_unlock(&data.input_mutex);
+  }
+
+  g_mutex_lock(&data.input_mutex);
+  while (data.input_status != 0)
+    g_cond_wait(&data.input_cond, &data.input_mutex);
+  data.input_status = -1;
+  g_cond_signal(&data.input_cond);
+  g_mutex_unlock(&data.input_mutex);
+
+  return NULL;
+}
+
 int
 main(int argc, char* argv[])
 {
-  gchar* text;
+  /* deprecated since GLib 2.36 */
+  g_type_init();
+
+  /* deprecated since GLib 2.32 */
+  g_thread_init(NULL);
+
+  gchar* text = NULL;
+  gchar* text_ = NULL;
+  PangoAttrList* attr_list = NULL;
 
   PREPARE_CATCH;
   START_CATCH;
 
-  CATCH(parse_options(&argc, &argv),
-      "Error parsing options, try --help.");
-
-  g_type_init();
-
+  CATCH(parse_options(&argc, &argv), "Error parsing options, try --help.");
   CATCH(setup(), "");
   CATCH(verify_vals(), "");
+  CATCH(open_input(), "");
 
-  CATCH((data.list = g_queue_new()) != NULL,
-      "Unable to allocate scrollbuffer list.");
+  data.list = g_queue_new();
+  CATCH(data.list != NULL, "Unable to allocate scrollbuffer list.");
 
-  setup_width();
-  while ((text = get_data()) != NULL)
+  GThread* reader_thread = g_thread_new("reader", read_input, NULL);
+
+  while (1)
   {
+    g_mutex_lock(&data.input_mutex);
+    while (data.input_status == 0)
+      g_cond_wait(&data.input_cond, &data.input_mutex);
+    if (data.input_status < 0)
+      break;
+    text = data.text;
+    data.input_status = 0;
+    g_cond_signal(&data.input_cond);
+    g_mutex_unlock(&data.input_mutex);
+
+    if (config.markup)
+    {
+      text_ = NULL;
+      if (pango_parse_markup(text, -1, 0, &attr_list, &text_, NULL, NULL))
+      {
+        pango_layout_set_attributes(data.rend->lay, attr_list);
+        pango_attr_list_unref(attr_list);
+        g_free(text);
+        text = text_;
+      }
+    }
+
     pango_layout_set_text(data.rend->lay, text, -1);
     g_free(text);
+
+    setup_width();
     resize_and_show();
   }
+
+  g_thread_join(reader_thread);
 
   END_CATCH;
 

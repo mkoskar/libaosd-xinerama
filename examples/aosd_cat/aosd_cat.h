@@ -48,6 +48,7 @@ static struct Configuration
   gint transparency;
   gchar* font;
   gint width;
+  gint alignment;
 
   /* Coloring */
   gchar* back_color;
@@ -64,14 +65,18 @@ static struct Configuration
   gint lines;
 
   /* Source */
+  gboolean wait;
+  gboolean keep_reading;
+  gboolean markup;
   gchar* input;
+  gint input_timeout;
 } config =
 {
   0, 192, 255,
 
   -1, 6, 50, -50, 2, 0,
 
-  2, NULL, 0,
+  2, NULL, 0, 0,
 
   NULL, "black", "green",
 
@@ -79,7 +84,7 @@ static struct Configuration
 
   0, 1,
 
-  "-"
+  0, 0, 0, "-", 0
 };
 
 static struct Globals
@@ -90,10 +95,14 @@ static struct Globals
   GQueue* list;
   unsigned width;
   unsigned height;
+  gchar* text;
+  int input_status;
+  GMutex input_mutex;
+  GCond input_cond;
 } data =
 {
   NULL, NULL, NULL, NULL,
-  0, 0
+  0, 0, NULL, 0
 };
 
 typedef struct 

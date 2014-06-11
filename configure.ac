@@ -113,7 +113,7 @@ AC_ARG_ENABLE(glib,
 )
 
 if test "$enable_glib" = "yes"; then
-    PKG_CHECK_MODULES(GLIB, glib-2.0,
+    PKG_CHECK_MODULES(GLIB, glib-2.0 gthread-2.0,
 	[
 	 EXAMPLES+=" image"
 	 if test "$enable_pangocairo" = "yes"; then
