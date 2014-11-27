@@ -1,5 +1,5 @@
-libaosd
-=======
+libaosd-xinerama
+================
 
 :Description: libaosd (Atheme OSD) with Xinerama support and aosd_cat enhancements
 :License: see LICENSE for details
@@ -48,14 +48,14 @@ where:
 * ``-m``   - interpret markup
 
 Above is a part of a my daemon script called ``osd`` / ``osdd``
-(`source <https://github.com/miroslavkoskar/homefiles/blob/master/bin/osd>`_).
+(`source <https://github.com/mkoskar/homefiles/blob/master/bin/osd>`_).
 
 I use it for notifications of system changes as a result of trigger
 (usually window manager shortcut) such as:
 
 * audio settings (volume, mute on/off, dock on/off)
 * dpms on/off
-* rfkill 
+* rfkill
 * xkb layouts
 
 
@@ -71,4 +71,4 @@ interval reset.
 
 It is possible to improve on this, such that reader thread will send X client
 message to inform main thread (while in X processing loop) of new data and thus
-prevent unnecessary checks (TODO).
+prevent unnecessary checks.
