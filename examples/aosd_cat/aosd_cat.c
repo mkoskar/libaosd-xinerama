@@ -53,6 +53,7 @@ parse_options(int* argc, char** argv[])
   ADD_NUMB(transparency);
   ADD_STRN(font);
   ADD_NUMB(width);
+  ADD_NUMB(spacing);
   ADD_NUMB(alignment);
   ADD_STRN(back_color);
   ADD_STRN(shadow_color);
@@ -104,6 +105,7 @@ parse_options(int* argc, char** argv[])
     OPT_INT("transparency", 't', transparency, "transparency mode."),
     OPT_STR("font", 'n', font, "OSD font."),
     OPT_INT("width", 'w', width, "OSD wrapping width in pixels."),
+    OPT_INT("spacing", 'P', spacing, "OSD line spacing adjustment in pixels."),
     OPT_INT("alignment", 'A', alignment, "text alignment (0=left, 1=center, 2=right)."),
     { NULL }
   };
@@ -416,6 +418,14 @@ setup_width(void)
   pango_layout_set_width(data.rend->lay, data.width);
 }
 
+static void
+setup_spacing(void)
+{
+  if (config.spacing != 0) {
+    pango_layout_set_spacing(data.rend->lay, config.spacing * PANGO_SCALE);
+  }
+}
+
 static int
 irq_poll_func(void)
 {
@@ -552,6 +562,7 @@ main(int argc, char* argv[])
     g_free(text);
 
     setup_width();
+    setup_spacing();
     resize_and_show();
   }
 

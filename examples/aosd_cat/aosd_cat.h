@@ -48,6 +48,7 @@ static struct Configuration
   gint transparency;
   gchar* font;
   gint width;
+  gint spacing;
   gint alignment;
 
   /* Coloring */
@@ -76,7 +77,7 @@ static struct Configuration
 
   -1, 6, 50, -50, 2, 0,
 
-  2, NULL, 0, 0,
+  2, NULL, 0, 0, 0,
 
   NULL, "black", "green",
 

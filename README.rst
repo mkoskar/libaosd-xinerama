@@ -26,6 +26,7 @@ This is a fork of https://github.com/atheme/libaosd with following enhancements.
     -k, --keep-reading      Reopen input on EOF (doesn't have any effect when reading from stdin).
     -m, --markup            Enable Pango markup language.
     -T, --input-timeout=0   Sets the input timeout (in seconds).
+    -P, --spacing=0         Sets the line-height adjustment (in pixels)
 
 
 Usage
